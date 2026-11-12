@@ -147,15 +147,36 @@ document.getElementById('remove').onclick = function () {
 };
 </script></body></html>`;
 
+// Adresse à taper sur la TV : https://vidaahub.com, ou https://vidaahub.com:8443 si le port 443 est déjà pris
+// (Apache/XAMPP/IIS…). VIDAA vérifie le nom de domaine, pas le port.
+let tvAddress = 'https://vidaahub.com';
+
 function startWeb() {
-  const handler = (req, res) => { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(page()); };
-  https.createServer({ cert: CERT, key: KEY }, handler)
-    .on('error', (e) => { console.error(`❌ HTTPS (port 443) : ${e.message}\n   Lance le terminal en administrateur, et ferme tout logiciel qui utilise le port 443.`); process.exit(1); })
-    .listen(Number(process.env.HTTPS_PORT) || 443);
-  http.createServer((req, res) => { res.writeHead(302, { Location: 'https://vidaahub.com/' }); res.end(); })
-    // le port 80 est facultatif, mais s'il est pris par un autre logiciel la TV y affichera autre chose (« Index of / »)
-    .on('error', () => console.log('\n⚠️  Le port 80 est déjà utilisé par un autre logiciel de cet ordinateur :\n   sur la TV, tape bien l\'adresse COMPLÈTE  https://vidaahub.com  (avec https://)\n'))
-    .listen(Number(process.env.HTTP_PORT) || 80);
+  return new Promise((resolve) => {
+    const handler = (req, res) => { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(page()); };
+    const ports = process.env.HTTPS_PORT ? [Number(process.env.HTTPS_PORT)] : [443, 8443, 9443];
+    const tryPort = (i) => {
+      https.createServer({ cert: CERT, key: KEY }, handler)
+        .once('listening', () => {
+          if (ports[i] !== 443) {
+            tvAddress = `https://vidaahub.com:${ports[i]}`;
+            console.log(`\n⚠️  Le port 443 est pris par un autre logiciel (Apache, XAMPP, IIS…) : la page est servie sur le port ${ports[i]}.`);
+          }
+          resolve();
+        })
+        .once('error', (e) => {
+          if (i + 1 < ports.length) return tryPort(i + 1);
+          console.error(`❌ HTTPS : ${e.message}\n   Lance le terminal en administrateur, ou arrête le logiciel qui occupe les ports 443/8443.`);
+          process.exit(1);
+        })
+        .listen(ports[i]);
+    };
+    tryPort(0);
+    // port 80 facultatif : redirige vers la page (sinon un autre logiciel y répond « Index of / »)
+    http.createServer((req, res) => { res.writeHead(302, { Location: tvAddress + '/' }); res.end(); })
+      .on('error', () => {})
+      .listen(Number(process.env.HTTP_PORT) || 80);
+  });
 }
 
 if (!APP.url.startsWith('https://')) {
@@ -165,15 +186,14 @@ if (!APP.url.startsWith('https://')) {
 const ip = lanIp();
 if (!ip) { console.error('❌ Aucune adresse réseau locale trouvée. Connecte cet ordinateur au même Wi-Fi que la TV.'); process.exit(1); }
 startDns(ip);
-startWeb();
-console.log(`
+startWeb().then(() => console.log(`
 ⛳ Installateur Smart Golf Party prêt (app → ${APP.url})
 
   1. Sur la TV : Paramètres → Réseau → Configuration réseau → DNS manuel : ${ip}
-  2. Ouvre le navigateur de la TV à l'adresse :  https://vidaahub.com   (avec https://)
+  2. Ouvre le navigateur de la TV à l'adresse EXACTE :  ${tvAddress}
      (accepte l'avertissement de certificat : il ne concerne que cette page d'installation)
   3. Appuie sur « Installer l'app ⛳ »
   4. Remets le DNS de la TV en automatique, puis redémarre la TV
   5. Ferme cette fenêtre (Ctrl+C)
 
-En attente de la TV…`);
+En attente de la TV…`));
