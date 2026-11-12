@@ -14,7 +14,7 @@ const http = require('http');
 const os = require('os');
 
 const APP = {
-  id: 'SmartGolfParty_debug',       // VIDAA attend un identifiant suffixé "_debug" pour les apps installées ainsi
+  id: 'smartgolfparty',             // identifiant dans le registre des apps (et 'smartgolfpartydebug' pour l'ancienne méthode)
   name: 'Smart Golf Party',
   url: process.argv[2] || 'https://moonshinersvalley.github.io/smartgolf-tv/',
   icon: (process.argv[2] || 'https://moonshinersvalley.github.io/smartgolf-tv/').replace(/\/?$/, '/') + 'icon.png'
@@ -124,26 +124,106 @@ function startDns(ip) {
 }
 
 // --- Page d'installation servie en HTTPS sur vidaahub.com ---
+// Page d'installation. Méthode inspirée des installateurs communautaires qui marchent sur les firmwares récents
+// (github.com/NoobyGains/stremio-vidaa-tv, technique du registre documentée par github.com/weinzii/vidaa-edge) :
+// 1) entrée ajoutée au registre des apps (websdk/Appinfo.json), lu d'abord et jamais réécrit à l'aveugle ;
+// 2) en secours, l'ancien Hisense_installApp ; 3) message de rafraîchissement au menu de la TV.
 const page = () => `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Installer Smart Golf Party</title>
-<style>body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;background:#1f3a24;color:#fbf6e9;font-family:system-ui,sans-serif;text-align:center}
-img{width:200px;height:200px;border-radius:44px}button{font-size:2rem;padding:18px 44px;border:none;border-radius:18px;background:#f4c430;color:#1f3a24;font-weight:800}
-button:focus{outline:6px solid #fbf6e9;outline-offset:6px}#out{font-size:1.5rem;min-height:2em;max-width:80vw}.small{opacity:.7;font-size:1.1rem}</style></head>
-<body><img src="${APP.icon}" alt=""><h1>Smart Golf Party</h1>
-<button id="install" autofocus>Installer l'app ⛳</button><button id="remove" style="background:#e9e2cf;font-size:1.2rem;padding:10px 24px">Désinstaller</button>
-<div id="out"></div><div class="small">Après l'installation : remets le DNS de la TV en automatique, puis redémarre la TV.</div>
+<style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#1f3a24;color:#fbf6e9;font-family:system-ui,sans-serif;text-align:center}
+img{width:170px;height:170px;border-radius:38px}.row{display:flex;gap:16px}button{font-size:1.6rem;padding:14px 32px;border:none;border-radius:16px;background:#f4c430;color:#1f3a24;font-weight:800}
+button.alt{background:#e9e2cf;font-size:1.2rem}button:focus{outline:6px solid #fbf6e9;outline-offset:5px}#out{font-size:1.4rem;min-height:2em;max-width:85vw}
+#diag{font:0.95rem monospace;opacity:.75;max-width:85vw;white-space:pre-wrap;text-align:left}</style></head>
+<body><img src="${APP.icon}" alt=""><h1 style="margin:0">Smart Golf Party</h1>
+<div class="row"><button id="install" autofocus>Installer l'app ⛳</button><button id="verify" class="alt">Vérifier</button><button id="remove" class="alt">Désinstaller</button></div>
+<div id="out"></div><div id="diag"></div>
 <script>
-var out = document.getElementById('out');
-function done(ok, what) { out.textContent = ok ? '✅ ' + what + ' ! Remets le DNS de la TV en automatique et redémarre-la.' : '❌ Échec (' + what + '). Ton firmware bloque peut-être l\\u2019installation.'; if (window.refreshAppsOnHisenseUI) try { refreshAppsOnHisenseUI(); } catch (e) {} }
-document.getElementById('install').onclick = function () {
-  if (typeof Hisense_installApp !== 'function') { out.textContent = '❌ Fonction d\\u2019installation absente : ouvre cette page avec le navigateur de la TV Hisense (vidaahub.com).'; return; }
-  out.textContent = 'Installation…';
+var ID = ${JSON.stringify(APP.id)}, LEGACY_IDS = ['SmartGolfParty_debug'], NAME = ${JSON.stringify(APP.name)};
+var URL_APP = ${JSON.stringify(APP.url)}, ICON = ${JSON.stringify(APP.icon)}, PATH = 'websdk/Appinfo.json', MODE = 6;
+var out = document.getElementById('out'), diag = document.getElementById('diag');
+function say(t) { out.textContent = t; }
+function has(f) { return typeof window[f] === 'function'; }
+function info() {
+  var d = [];
+  ['HiUtils_createRequest', 'Hisense_installApp', 'Hisense_uninstallApp', 'Hisense_AddInsecureDomain'].forEach(function (f) { d.push(f + ' : ' + (has(f) ? 'oui' : 'non')); });
+  d.push('omi_platform : ' + (window.omi_platform || window.opera_omi ? 'oui' : 'non'));
+  try { if (has('Hisense_GetModelName')) d.push('modèle : ' + Hisense_GetModelName()); } catch (e) {}
+  try { if (has('Hisense_GetFirmWareVersion')) d.push('firmware : ' + Hisense_GetFirmWareVersion()); } catch (e) {}
+  diag.textContent = d.join('\\n');
+}
+// autorise le domaine de l'app (facultatif selon les firmwares)
+try { if (has('Hisense_AddInsecureDomain')) Hisense_AddInsecureDomain(new URL(URL_APP).hostname); } catch (e) {}
+info();
+
+function readReg() {
+  if (!has('HiUtils_createRequest')) return null;
   try {
-    Hisense_installApp(${JSON.stringify(APP.id)}, ${JSON.stringify(APP.name)}, ${JSON.stringify(APP.icon)}, ${JSON.stringify(APP.icon)}, ${JSON.stringify(APP.icon)}, ${JSON.stringify(APP.url)}, 'store', function (status) { done(!status, status ? 'code ' + status : 'App installée'); });
-  } catch (e) { done(false, e.message); }
+    var res = HiUtils_createRequest('fileRead', { path: PATH, mode: MODE });
+    if (!res || !res.ret) return null;
+    var p = JSON.parse(res.msg);
+    return p && Array.isArray(p.AppInfo) ? p : null;
+  } catch (e) { return null; }
+}
+function writeReg(apps) {
+  var res = HiUtils_createRequest('fileWrite', { path: PATH, mode: MODE, writedata: JSON.stringify(apps) });
+  return !!(res && res.ret);
+}
+function find(apps, id) { for (var i = 0; apps && i < apps.AppInfo.length; i++) if (apps.AppInfo[i] && apps.AppInfo[i].Id === id) return i; return -1; }
+function refreshLauncher() {
+  var msg = JSON.stringify({ type: 'APPMessage', MsgType: 'appControl', action: 'updateAppState', source: 'browser', startAppType: 0x2,
+    param: { event: 'AllAppsUpdate', SubModuleName: 'AllApps', startFrom: '', appInfo: ID } });
+  try {
+    if (window.omi_platform && typeof omi_platform.sendPlatformMessage === 'function') { omi_platform.sendPlatformMessage(msg); return true; }
+    if (window.opera_omi && typeof opera_omi.sendPlatformMessage === 'function') { opera_omi.sendPlatformMessage(msg); return true; }
+  } catch (e) {}
+  return false;
+}
+
+function installRegistry() {
+  var apps = readReg();
+  if (!apps) return false; // registre illisible : on n'écrit JAMAIS à l'aveugle (ça effacerait toutes les apps)
+  var entry = { Id: ID, AppName: NAME, Title: NAME, URL: URL_APP, StartCommand: URL_APP, IconURL: ICON, Icon_96: ICON, Image: ICON, Thumb: ICON,
+    Type: 'Browser', InstallTime: new Date().toISOString().split('T')[0], RunTimes: 0, StoreType: 'custom', PreInstall: false };
+  var i = find(apps, ID);
+  if (i >= 0) apps.AppInfo[i] = entry; else apps.AppInfo.push(entry);
+  return writeReg(apps) && find(readReg(), ID) >= 0; // relu pour vérifier qu'elle est bien enregistrée
+}
+
+document.getElementById('install').onclick = function () {
+  say('Installation…');
+  if (installRegistry()) {
+    var r = refreshLauncher();
+    say('✅ App enregistrée dans la liste des apps de la TV' + (r ? ' (menu rafraîchi)' : '') + '. Remets le DNS en automatique puis débranche la TV 10 s.');
+    return;
+  }
+  if (!has('Hisense_installApp')) { say('❌ Aucune méthode d\\u2019installation disponible sur ce firmware.'); return; }
+  try {
+    Hisense_installApp(ID + 'debug', NAME, ICON, ICON, ICON, URL_APP, 'store', function (status) {
+      var ok = !status;
+      var r = ok && refreshLauncher();
+      say(ok ? '✅ App installée (méthode classique)' + (r ? ', menu rafraîchi' : '') + '. Remets le DNS en automatique puis débranche la TV 10 s.'
+             : '❌ Échec (code ' + status + '). Ton firmware bloque peut-être l\\u2019installation.');
+    });
+  } catch (e) { say('❌ ' + e.message); }
 };
+
+document.getElementById('verify').onclick = function () {
+  var apps = readReg();
+  if (!apps) { say(has('HiUtils_createRequest') ? '⚠️ Registre des apps illisible.' : '⚠️ Vérification impossible sur ce firmware (méthode classique uniquement).'); return; }
+  var i = find(apps, ID);
+  say(i >= 0 ? '✅ Smart Golf Party est bien enregistrée (' + apps.AppInfo.length + ' apps dans la liste). Redémarre la TV (débranche 10 s) pour la voir.'
+             : '❌ Smart Golf Party n\\u2019est pas dans la liste des apps (' + apps.AppInfo.length + ' apps).');
+};
+
 document.getElementById('remove').onclick = function () {
-  if (typeof Hisense_uninstallApp !== 'function') { out.textContent = '❌ Fonction de désinstallation absente.'; return; }
-  try { Hisense_uninstallApp(${JSON.stringify(APP.id)}, function (status) { done(!status, status ? 'code ' + status : 'App désinstallée'); }); } catch (e) { done(false, e.message); }
+  var done = false, apps = readReg();
+  if (apps) {
+    var changed = false;
+    [ID].concat(LEGACY_IDS).forEach(function (id) { var i = find(apps, id); if (i >= 0) { apps.AppInfo.splice(i, 1); changed = true; } });
+    if (changed && writeReg(apps)) done = true;
+  }
+  if (has('Hisense_uninstallApp')) [ID + 'debug'].concat(LEGACY_IDS).forEach(function (id) { try { Hisense_uninstallApp(id, function () {}); } catch (e) {} });
+  refreshLauncher();
+  say(done ? '✅ App retirée de la liste.' : 'Désinstallation demandée.');
 };
 </script></body></html>`;
 
