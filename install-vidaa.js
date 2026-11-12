@@ -178,19 +178,32 @@ function refreshLauncher() {
   return false;
 }
 
+var steps = [];
 function installRegistry() {
+  steps = [];
   var apps = readReg();
-  if (!apps) return false; // registre illisible : on n'écrit JAMAIS à l'aveugle (ça effacerait toutes les apps)
+  if (!apps) { steps.push('registre : illisible → pas d\\u2019écriture'); return false; } // on n'écrit JAMAIS à l'aveugle (ça effacerait toutes les apps)
+  steps.push('registre lu : ' + apps.AppInfo.length + ' apps');
   var entry = { Id: ID, AppName: NAME, Title: NAME, URL: URL_APP, StartCommand: URL_APP, IconURL: ICON, Icon_96: ICON, Image: ICON, Thumb: ICON,
     Type: 'Browser', InstallTime: new Date().toISOString().split('T')[0], RunTimes: 0, StoreType: 'custom', PreInstall: false };
   var i = find(apps, ID);
   if (i >= 0) apps.AppInfo[i] = entry; else apps.AppInfo.push(entry);
-  return writeReg(apps) && find(readReg(), ID) >= 0; // relu pour vérifier qu'elle est bien enregistrée
+  var res;
+  try { res = HiUtils_createRequest('fileWrite', { path: PATH, mode: MODE, writedata: JSON.stringify(apps) }); }
+  catch (e) { steps.push('écriture : exception ' + e.message); return false; }
+  steps.push('écriture : ret=' + (res && res.ret) + ' msg=' + (res && res.msg));
+  var back = readReg();
+  var ok = find(back, ID) >= 0; // relu pour vérifier qu'elle est bien enregistrée
+  steps.push('relecture : ' + (back ? back.AppInfo.length + ' apps, Smart Golf ' + (ok ? 'présente' : 'ABSENTE') : 'illisible'));
+  return ok;
 }
+function showSteps() { diag.textContent = steps.join('\\n') + '\\n\\n' + diag.textContent; }
 
 document.getElementById('install').onclick = function () {
   say('Installation…');
-  if (installRegistry()) {
+  var viaRegistry = installRegistry();
+  showSteps();
+  if (viaRegistry) {
     var r = refreshLauncher();
     say('✅ App enregistrée dans la liste des apps de la TV' + (r ? ' (menu rafraîchi)' : '') + '. Remets le DNS en automatique puis débranche la TV 10 s.');
     return;
@@ -200,7 +213,7 @@ document.getElementById('install').onclick = function () {
     Hisense_installApp(ID + 'debug', NAME, ICON, ICON, ICON, URL_APP, 'store', function (status) {
       var ok = !status;
       var r = ok && refreshLauncher();
-      say(ok ? '✅ App installée (méthode classique)' + (r ? ', menu rafraîchi' : '') + '. Remets le DNS en automatique puis débranche la TV 10 s.'
+      say(ok ? '⚠️ Registre refusé ; la méthode classique répond OK mais ce n\\u2019est pas vérifiable' + (r ? ' (menu rafraîchi)' : '') + '. Remets le DNS en automatique, débranche la TV 10 s et regarde à la fin de Toutes les apps.'
              : '❌ Échec (code ' + status + '). Ton firmware bloque peut-être l\\u2019installation.');
     });
   } catch (e) { say('❌ ' + e.message); }
