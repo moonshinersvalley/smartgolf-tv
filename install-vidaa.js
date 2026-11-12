@@ -153,7 +153,8 @@ function startWeb() {
     .on('error', (e) => { console.error(`❌ HTTPS (port 443) : ${e.message}\n   Lance le terminal en administrateur, et ferme tout logiciel qui utilise le port 443.`); process.exit(1); })
     .listen(Number(process.env.HTTPS_PORT) || 443);
   http.createServer((req, res) => { res.writeHead(302, { Location: 'https://vidaahub.com/' }); res.end(); })
-    .on('error', () => {})   // le port 80 est facultatif
+    // le port 80 est facultatif, mais s'il est pris par un autre logiciel la TV y affichera autre chose (« Index of / »)
+    .on('error', () => console.log('\n⚠️  Le port 80 est déjà utilisé par un autre logiciel de cet ordinateur :\n   sur la TV, tape bien l\'adresse COMPLÈTE  https://vidaahub.com  (avec https://)\n'))
     .listen(Number(process.env.HTTP_PORT) || 80);
 }
 
@@ -169,7 +170,7 @@ console.log(`
 ⛳ Installateur Smart Golf Party prêt (app → ${APP.url})
 
   1. Sur la TV : Paramètres → Réseau → Configuration réseau → DNS manuel : ${ip}
-  2. Ouvre le navigateur de la TV à l'adresse :  vidaahub.com
+  2. Ouvre le navigateur de la TV à l'adresse :  https://vidaahub.com   (avec https://)
      (accepte l'avertissement de certificat : il ne concerne que cette page d'installation)
   3. Appuie sur « Installer l'app ⛳ »
   4. Remets le DNS de la TV en automatique, puis redémarre la TV
