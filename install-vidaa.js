@@ -140,7 +140,11 @@ button.alt{background:#e9e2cf;font-size:1.2rem}button:focus{outline:6px solid #f
 var ID = ${JSON.stringify(APP.id)}, LEGACY_IDS = ['SmartGolfParty_debug'], NAME = ${JSON.stringify(APP.name)};
 var URL_APP = ${JSON.stringify(APP.url)}, ICON = ${JSON.stringify(APP.icon)}, PATH = 'websdk/Appinfo.json', MODE = 6;
 var out = document.getElementById('out'), diag = document.getElementById('diag');
-function say(t) { out.textContent = t; }
+function say(t) {
+  out.textContent = t;
+  // copie du résultat dans le terminal de l'ordinateur (plus simple que de recopier l'écran de la TV)
+  try { var x = new XMLHttpRequest(); x.open('POST', '/report'); x.send(t + '\\n' + diag.textContent); } catch (e) {}
+}
 function has(f) { return typeof window[f] === 'function'; }
 function info() {
   var d = [];
@@ -246,7 +250,16 @@ let tvAddress = 'https://vidaahub.com';
 
 function startWeb() {
   return new Promise((resolve) => {
-    const handler = (req, res) => { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(page()); };
+    const handler = (req, res) => {
+      if (req.method === 'POST' && req.url === '/report') {
+        let body = '';
+        req.on('data', (c) => { if (body.length < 20000) body += c; });
+        req.on('end', () => { console.log('\n📺 Résultat affiché sur la TV :\n' + body.split('\n').map(l => '   ' + l).join('\n') + '\n'); res.end(); });
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(page());
+    };
     const ports = process.env.HTTPS_PORT ? [Number(process.env.HTTPS_PORT)] : [443, 8443, 9443];
     const tryPort = (i) => {
       https.createServer({ cert: CERT, key: KEY }, handler)
