@@ -15,7 +15,7 @@ Il faut un ordinateur **connecté au même Wi-Fi que la TV**, avec [Node.js](htt
    ```
    (Windows : autorise l'accès réseau si le pare-feu le demande.)
 3. Sur la TV : **Paramètres → Réseau → Configuration réseau → DNS manuel** = l'adresse IP affichée par le terminal.
-4. Ouvre le **navigateur de la TV** sur **`https://vidaahub.com`** (avec `https://`) et accepte l'avertissement de certificat.
+4. Ouvre le **navigateur de la TV** sur l'**adresse exacte affichée par le terminal** : `https://vidaahub.com`, ou `https://vidaahub.com:8443` si un autre logiciel (Apache, XAMPP, IIS…) occupe déjà le port 443. Accepte l'avertissement de certificat.
 5. Appuie sur **« Installer l'app ⛳ »**.
 6. Remets le **DNS de la TV en automatique**, puis **redémarre la TV**. Ferme le terminal (Ctrl+C).
 
