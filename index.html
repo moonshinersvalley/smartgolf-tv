@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Golf Party</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: radial-gradient(circle at 50% 30%, #3d6b40, #1f3a24 70%); color: #fbf6e9; font-family: system-ui, sans-serif; }
+    main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; }
+    img { width: 180px; height: 180px; border-radius: 40px; }
+    h1 { margin: 0; font-size: 3rem; }
+    p { margin: 0; font-size: 1.5rem; opacity: 0.85; }
+    .err { color: #f4c430; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="icon.png" alt="">
+    <h1>Smart Golf Party</h1>
+    <p id="msg">Connexion au jeu…</p>
+  </main>
+  <script>
+    // Lanceur de l'app VIDAA : son adresse ne change jamais. Il lit l'adresse du tunnel du moment
+    // (publiée par le serveur dans tunnel.json, via l'API GitHub qui n'a pas le cache de GitHub Pages) et redirige.
+    var msg = document.getElementById('msg');
+    var owner = location.hostname.split('.')[0];
+    var repo = location.pathname.split('/')[1] || (owner + '.github.io');
+    var api = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/tunnel.json';
+
+    function fail(text) { msg.className = 'err'; msg.textContent = text; setTimeout(load, 5000); }
+
+    function load() {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', api + '?t=' + Date.now());
+      xhr.setRequestHeader('Accept', 'application/vnd.github.raw+json');
+      xhr.onload = function () {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          if (!data.url || !data.online) return fail('Le serveur du jeu est éteint. Lance-le sur le PC, puis patiente…');
+          msg.textContent = 'C’est parti ⛳';
+          location.replace(data.url);
+        } catch (e) { fail('Réponse inattendue, nouvel essai…'); }
+      };
+      xhr.onerror = function () { fail('Pas de connexion Internet, nouvel essai…'); };
+      xhr.send();
+    }
+    load();
+
+    // Règle des apps VIDAA : la touche Retour ferme l'app
+    document.addEventListener('keydown', function (e) {
+      if (e.keyCode === 8 || e.keyCode === 461 || e.keyCode === 10009 || e.key === 'GoBack' || e.key === 'BrowserBack') window.close();
+    });
+  </script>
+</body>
+</html>
